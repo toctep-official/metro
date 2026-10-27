@@ -1,22 +1,27 @@
 """Интерактивная карта метро Москвы.
 
+Сайт статический — работает на GitHub Pages: маршрут ищет сам браузер (static/map.js).
+Этот скрипт готовит для него данные: из data/stations.json и data/cars.json собирает
+граф метро в data/site.json, а потом запускает сайт на этом компьютере.
+
 Запуск:  venv/bin/python app.py   ->   http://localhost:8000
+После правок в data/ запустите заново и закоммитьте data/site.json — его и читает сайт.
 """
 
-import heapq
 import json
 import math
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, send_from_directory
 
-DATA = json.loads((Path(__file__).parent / "data" / "stations.json").read_text(encoding="utf-8"))
+ROOT = Path(__file__).parent
+DATA = json.loads((ROOT / "data" / "stations.json").read_text(encoding="utf-8"))
 LINES = DATA["lines"]
 STATIONS = {st["id"]: st for st in DATA["stations"]}
 
 # Подсказки «в какой вагон садиться» — заполняются вручную, станции по названиям:
 # {"line": "1", "from": "Чистые пруды", "to": "Лубянка", "transfer_to": "7", "car": "первый", "note": "..."}
-CARS = json.loads((Path(__file__).parent / "data" / "cars.json").read_text(encoding="utf-8"))
+CARS = json.loads((ROOT / "data" / "cars.json").read_text(encoding="utf-8"))
 def _norm(name):
     """Как norm() в map.js: регистр и «ё»/«е» не важны («Кузнецкий Мост» = «Кузнецкий мост»)"""
     return str(name).lower().replace("ё", "е")
@@ -36,8 +41,6 @@ for i, hint in enumerate(CARS, 1):
 TRAIN_SPEED_KMH = 40   # средняя скорость поезда
 STOP_MIN = 0.5         # стоянка на станции, минут
 TRANSFER_MIN = 4       # пересадка, минут
-
-app = Flask(__name__)
 
 
 def distance_km(a, b):
@@ -110,76 +113,41 @@ def build_graph():
     return graph, edges
 
 
-GRAPH, EDGES = build_graph()
+def build_site():
+    """Собирает data/site.json — всё, что нужно сайту: линии, станции, отрезки для рисования,
+    подсказки про вагоны и граф для поиска маршрута.
+    Узел графа в JSON — строка "станция|линия" (в JSON ключом может быть только строка)."""
+    graph, edges = build_graph()
+    site = {
+        "lines": LINES,
+        "stations": DATA["stations"],
+        "edges": edges,
+        "cars": CARS,
+        "transfer_min": TRANSFER_MIN,
+        "graph": {
+            f"{sid}|{line}": [[f"{n[0]}|{n[1]}", minutes, via] for n, minutes, via in links]
+            for (sid, line), links in graph.items()
+        },
+    }
+    out = ROOT / "data" / "site.json"
+    out.write_text(json.dumps(site, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"Собран {out.relative_to(ROOT)}: {len(site['stations'])} станций, {len(site['graph'])} платформ")
 
 
-def find_route(start, finish):
-    """Алгоритм Дейкстры: самый быстрый путь от станции start до станции finish.
-    Стартовать можно с любой платформы станции start, приехать — на любую платформу finish."""
-    best = {}                  # лучшее известное время до платформы
-    came_from = {}             # откуда мы пришли на платформу (чтобы восстановить путь)
-    queue = []                 # очередь: (время, платформа), сверху — самая «близкая»
-    for node in GRAPH:
-        if node[0] == start:
-            best[node] = 0
-            heapq.heappush(queue, (0, node))
-    end = None
-    while queue:
-        time, node = heapq.heappop(queue)
-        if node[0] == finish:
-            end = node
-            break
-        if time > best[node]:
-            continue           # эту платформу уже нашли быстрее — пропускаем
-        for nxt, minutes, line in GRAPH[node]:
-            new_time = time + minutes
-            if new_time < best.get(nxt, math.inf):
-                best[nxt] = new_time
-                came_from[nxt] = (node, line)
-                heapq.heappush(queue, (new_time, nxt))
-    if end is None:
-        return None
-
-    # Идём от финиша назад к старту и собираем путь
-    steps = []
-    node = end
-    while node in came_from:
-        prev, line = came_from[node]
-        steps.append({"from": prev[0], "to": node[0], "line": line, "to_line": node[1]})
-        node = prev
-    steps.reverse()
-
-    # Пересадка в самом начале или конце не нужна: «Сокольники» — это одна станция для пассажира
-    minutes = best[end]
-    while steps and steps[0]["line"] is None:
-        steps.pop(0)
-        minutes -= TRANSFER_MIN
-    while steps and steps[-1]["line"] is None:
-        steps.pop()
-        minutes -= TRANSFER_MIN
-    return {"minutes": round(minutes), "steps": steps}
+# Локальный сервер: просто отдаёт файлы проекта, как GitHub Pages
+app = Flask(__name__, static_folder=None)
 
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return send_from_directory(ROOT, "index.html")
 
 
-@app.route("/api/data")
-def api_data():
-    return jsonify({**DATA, "edges": EDGES, "cars": CARS})
-
-
-@app.route("/api/route")
-def api_route():
-    start, finish = request.args.get("from"), request.args.get("to")
-    if start not in STATIONS or finish not in STATIONS:
-        abort(400, "Неизвестная станция")
-    route = find_route(start, finish)
-    if route is None:
-        abort(404, "Маршрут не найден")
-    return jsonify(route)
+@app.route("/<path:path>")
+def files(path):
+    return send_from_directory(ROOT, path)
 
 
 if __name__ == "__main__":
+    build_site()
     app.run(port=8000, debug=True)

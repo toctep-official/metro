@@ -34,6 +34,8 @@ L.tileLayer(TILES_URL, {
 
 let LINES = {};      // линии по id
 let CARS = [];       // подсказки «в какой вагон садиться» (data/cars.json)
+let GRAPH = {};      // граф для поиска маршрута: "станция|линия" -> [[соседняя платформа, минуты, линия или null], ...]
+let TRANSFER_MIN = 4;
 let STATIONS = {};   // станции по id
 const markers = {};  // кружки станций на карте по id
 let edgeLayers = []; // все отрезки линий (чтобы приглушать их при показе маршрута)
@@ -76,6 +78,8 @@ function plural(n, one, few, many) {
 function drawMap(data) {
   LINES = data.lines;
   CARS = data.cars;
+  GRAPH = data.graph;
+  TRANSFER_MIN = data.transfer_min;
   data.stations.forEach((st) => (STATIONS[st.id] = st));
   $("count").textContent = data.stations.length;
 
@@ -269,26 +273,71 @@ function clearRoute() {
   Object.values(markers).forEach((m) => m.setStyle({ opacity: 1, fillOpacity: 1 }));
 }
 
+// Самый быстрый путь от станции start до станции finish — алгоритм Дейкстры.
+// Узел графа — платформа "станция|линия": на «Каширской» их две (Замоскворецкая и БКЛ).
+// Стартовать можно с любой платформы start, приехать — на любую платформу finish
+function findRoute(start, finish) {
+  const station = (node) => node.split("|")[0];
+  const best = {};      // лучшее известное время до платформы
+  const cameFrom = {};  // откуда пришли на платформу (чтобы восстановить путь)
+  const done = new Set();
+  Object.keys(GRAPH).forEach((node) => {
+    if (station(node) === start) best[node] = 0;
+  });
+
+  let end = null;
+  while (true) {
+    // Берём самую «близкую» ещё не проверенную платформу.
+    // Платформ всего около 300 — простой перебор тут не медленнее, чем очередь с приоритетом
+    let node = null;
+    for (const n in best) {
+      if (!done.has(n) && (node === null || best[n] < best[node])) node = n;
+    }
+    if (node === null) break;            // проверили всё, до финиша не добрались
+    if (station(node) === finish) { end = node; break; }
+    done.add(node);
+    for (const [next, minutes, line] of GRAPH[node]) {
+      const time = best[node] + minutes;
+      if (time < (best[next] ?? Infinity)) {
+        best[next] = time;
+        cameFrom[next] = [node, line];
+      }
+    }
+  }
+  if (!end) return null;
+
+  // Идём от финиша назад к старту и собираем путь
+  const steps = [];
+  for (let node = end; cameFrom[node]; node = cameFrom[node][0]) {
+    const [prev, line] = cameFrom[node];
+    steps.unshift({ from: station(prev), to: station(node), line, to_line: node.split("|")[1] });
+  }
+
+  // Пересадка в самом начале или конце не нужна: «Сокольники» — это одна станция для пассажира
+  let minutes = best[end];
+  while (steps.length && steps[0].line === null) { steps.shift(); minutes -= TRANSFER_MIN; }
+  while (steps.length && steps[steps.length - 1].line === null) { steps.pop(); minutes -= TRANSFER_MIN; }
+  return { minutes: Math.round(minutes), steps };
+}
+
 async function buildRoute(fromId, toId) {
   const box = $("route-result");
   box.hidden = false;
   clearRoute();
   const run = routeRun;
 
-  const res = await fetch(`/api/route?from=${fromId}&to=${toId}`);
-  if (!res.ok) {
+  const route = findRoute(fromId, toId);
+  if (!route) {
     box.innerHTML = `<p class="error">Не получилось построить маршрут</p>`;
     return;
   }
-  const route = await res.json();
-  if (run !== routeRun) return;  // пока ждали сервер, уже попросили другой маршрут
   if (route.steps.length === 0) {
     box.innerHTML = STATIONS[fromId].name === STATIONS[toId].name
       ? `<p class="error">Это одна и та же станция</p>`
       : `<p>«${STATIONS[fromId].name}» и «${STATIONS[toId].name}» соединены переходом — дойдёте пешком за ~4 минуты</p>`;
     return;
   }
-  // Сервер мог убрать пересадку в начале/конце — берём концы маршрута из ответа
+  // findRoute мог убрать пересадку в начале/конце — берём концы маршрута из него
   fromId = route.steps[0].from;
   toId = route.steps[route.steps.length - 1].to;
 
@@ -569,7 +618,8 @@ $("route-result").addEventListener("click", (e) => {
 
 // ---------- Старт ----------
 
-fetch("/api/data").then((r) => r.json()).then(drawMap);
+// Путь без «/» в начале — чтобы работало и на localhost, и на GitHub Pages (там сайт лежит в папке /metro/)
+fetch("data/site.json").then((r) => r.json()).then(drawMap);
 
 // ---------- Светлая и тёмная тема ----------
 

@@ -6,18 +6,18 @@
   <!-- Тему, выбранную кнопкой (солнце/луна), ставим сразу, ещё до отрисовки — иначе страница мигнёт светлой -->
   <script>try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
   <title>Метро Москвы — карта станций</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}">
+  <link rel="icon" type="image/svg+xml" href="static/logo.svg">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
   <div id="map"></div>
 
   <aside class="panel" id="panel">
     <header class="panel__head">
-      <h1><img class="logo" src="{{ url_for('static', filename='logo.svg') }}" alt="">Метро Москвы</h1>
+      <h1><img class="logo" src="static/logo.svg" alt="">Метро Москвы</h1>
       <p class="muted"><span id="count">…</span> станций · нажмите на любую</p>
       <!-- Значки солнца и луны — из набора Lucide (lucide.dev, лицензия ISC). Виден один, какой — решает style.css -->
       <button type="button" class="icon-btn theme-btn" id="theme">
@@ -94,6 +94,6 @@
   </aside>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="{{ url_for('static', filename='map.js') }}"></script>
+  <script src="static/map.js"></script>
 </body>
 </html>
