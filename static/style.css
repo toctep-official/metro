@@ -71,6 +71,9 @@ html, body {
 
 #map { position: fixed; inset: 0; background: var(--bg); }
 #map .leaflet-tile-pane { filter: var(--map-filter); }
+/* Подложка видна только пока карта движется (map.js добавляет класс map-moving) */
+#map .map-backdrop { visibility: hidden; }
+#map.map-moving .map-backdrop { visibility: visible; }
 
 .muted { color: var(--muted); }
 

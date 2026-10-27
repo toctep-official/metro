@@ -21,16 +21,35 @@ const TILES_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 // Запасная подложка: всегда плитки масштаба 10 (просто растянутые). При полёте с масштаба на масштаб
 // они не меняются, поэтому всегда на месте: пока основная карта догружается, вместо серых дыр
-// на мгновение видна чуть размытая карта
-L.tileLayer(TILES_URL, { maxZoom: 18, maxNativeZoom: 10, keepBuffer: 4, zIndex: 0 }).addTo(map);
+// на мгновение видна чуть размытая карта.
+// Видна она только пока карта движется (класс map-moving, см. ниже и style.css): растянутые плитки
+// занимают несколько экранов, и на телефоне рисовать их всё время тяжело — например, при смене темы
+L.tileLayer(TILES_URL, { maxZoom: 18, maxNativeZoom: 10, keepBuffer: 4, zIndex: 0, className: "map-backdrop" }).addTo(map);
 
 // Основная карта — поверх подложки. keepBuffer: 4 — держать загруженными плитки вокруг экрана
-L.tileLayer(TILES_URL, {
+const mainTiles = L.tileLayer(TILES_URL, {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   maxZoom: 18,
   keepBuffer: 4,
   zIndex: 1,
 }).addTo(map);
+
+// Карта поехала — показываем подложку. Остановилась — прячем, но только когда основная карта
+// догрузилась (иначе на месте недогруженных плиток мелькнут серые дыры)
+const mapEl = map.getContainer();
+let mapMoving = false;
+function hideBackdrop() {
+  if (!mapMoving && !mainTiles.isLoading()) mapEl.classList.remove("map-moving");
+}
+map.on("movestart zoomstart", () => {
+  mapMoving = true;
+  mapEl.classList.add("map-moving");
+});
+map.on("moveend zoomend", () => {
+  mapMoving = false;
+  hideBackdrop();
+});
+mainTiles.on("load", hideBackdrop);
 
 let LINES = {};      // линии по id
 let CARS = [];       // подсказки «в какой вагон садиться» (data/cars.json)
