@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Тему, выбранную кнопкой (солнце/луна), ставим сразу, ещё до отрисовки — иначе страница мигнёт светлой -->
+  <script>try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <title>Метро Москвы — карта станций</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div id="map"></div>
+
+  <aside class="panel" id="panel">
+    <header class="panel__head">
+      <h1><img class="logo" src="{{ url_for('static', filename='logo.svg') }}" alt="">Метро Москвы</h1>
+      <p class="muted"><span id="count">…</span> станций · нажмите на любую</p>
+      <!-- Значки солнца и луны — из набора Lucide (lucide.dev, лицензия ISC). Виден один, какой — решает style.css -->
+      <button type="button" class="icon-btn theme-btn" id="theme">
+        <svg class="theme-btn__sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/>
+          <path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+        </svg>
+        <svg class="theme-btn__moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Маршрут -->
+    <form class="route" id="route-form" autocomplete="off">
+      <div class="route__fields">
+        <div class="field">
+          <span class="field__dot field__dot--from"></span>
+          <span class="field__badge"></span>
+          <input id="from" placeholder="Откуда" aria-label="Откуда">
+          <ul class="suggest" hidden></ul>
+        </div>
+        <div class="field">
+          <span class="field__dot field__dot--to"></span>
+          <span class="field__badge"></span>
+          <input id="to" placeholder="Куда" aria-label="Куда">
+          <ul class="suggest" hidden></ul>
+        </div>
+      </div>
+      <button type="button" class="icon-btn" id="swap" title="Поменять местами" aria-label="Поменять местами">⇅</button>
+      <button type="submit" class="btn">Проложить маршрут</button>
+    </form>
+
+    <div id="route-result" class="route-result" hidden></div>
+
+    <!-- Карточка станции -->
+    <article id="card" class="card" hidden>
+      <figure class="card__photo">
+        <img id="card-img" alt="">
+        <figcaption id="card-credit"></figcaption>
+      </figure>
+      <div class="card__body">
+        <div id="card-lines" class="card__lines"></div>
+        <h2 id="card-name"></h2>
+        <dl class="facts">
+          <div id="card-opened-box">
+            <dt>Открыта</dt>
+            <dd id="card-opened"></dd>
+            <dd class="facts__extra" id="card-reopened"></dd>
+          </div>
+          <div id="card-depth-box"><dt>Глубина</dt><dd id="card-depth"></dd></div>
+          <div class="facts__wide"><dt>Тип</dt><dd id="card-type"></dd></div>
+        </dl>
+        <section id="card-transfers" class="names">
+          <h3>Пересадки</h3>
+          <ul id="card-transfers-list" class="transfers"></ul>
+        </section>
+        <section id="card-names" class="names">
+          <h3>История названий</h3>
+          <ol id="card-names-list"></ol>
+        </section>
+        <div class="card__actions">
+          <button class="btn btn--ghost" id="set-from">Отсюда</button>
+          <button class="btn btn--ghost" id="set-to">Сюда</button>
+          <a id="card-wiki" class="link" target="_blank" rel="noopener">Википедия ↗</a>
+        </div>
+      </div>
+    </article>
+
+    <footer class="panel__foot muted">
+      Данные: Викиданные и Википедия · Фото: Wikimedia Commons · Время в пути примерное
+    </footer>
+  </aside>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="{{ url_for('static', filename='map.js') }}"></script>
+</body>
+</html>

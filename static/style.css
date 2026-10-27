@@ -1,0 +1,397 @@
+:root {
+  color-scheme: light;    /* полосы прокрутки и поля ввода — светлые */
+  --bg: #f4f3ef;
+  --surface: #ffffff;
+  --text: #1b1d22;
+  --muted: #6b6f78;
+  --line: #e4e2dc;
+  --accent: #d92b2c;      /* красный — ошибки */
+  --from: #1a9a4b;
+  --to: #d92b2c;
+  --on-text: #ffffff;     /* текст на тёмной кнопке */
+  --btn-hover: #33363e;
+  --station-fill: #ffffff;           /* кружки станций в списке маршрута */
+  --transfer: #8a8d94;               /* пунктир пересадок на карте */
+  --route-transfer: #55585f;         /* пунктир пересадки в построенном маршруте */
+  --tooltip-bg: #ffffff;
+  --map-filter: grayscale(1) contrast(.85) brightness(1.08);  /* карта города — серая */
+  --radius: 14px;
+  --shadow: 0 10px 40px rgba(20, 22, 28, .14);
+}
+
+/* Тёмная тема. Включается сама, если на компьютере тёмная тема (и не выбрана светлая кнопкой),
+   или кнопкой с солнцем/луной — тогда у <html> появляется data-theme="dark".
+   Значения одинаковые в обоих блоках: в CSS нельзя написать «или» между @media и селектором */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #16181c;
+    --surface: #1f2228;
+    --text: #eceef2;
+    --muted: #9a9fa9;
+    --line: #30343c;
+    --accent: #ff6b6b;
+    --on-text: #16181c;
+    --btn-hover: #d3d6dc;
+    --station-fill: #1f2228;
+    --transfer: #7d828c;
+    --route-transfer: #c5c8ce;
+    --tooltip-bg: #2a2d34;
+    --map-filter: grayscale(1) invert(1) brightness(.85) contrast(.85);  /* карту «выворачиваем» в тёмную */
+    --shadow: 0 10px 40px rgba(0, 0, 0, .45);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16181c;
+  --surface: #1f2228;
+  --text: #eceef2;
+  --muted: #9a9fa9;
+  --line: #30343c;
+  --accent: #ff6b6b;
+  --on-text: #16181c;
+  --btn-hover: #d3d6dc;
+  --station-fill: #1f2228;
+  --transfer: #7d828c;
+  --route-transfer: #c5c8ce;
+  --tooltip-bg: #2a2d34;
+  --map-filter: grayscale(1) invert(1) brightness(.85) contrast(.85);
+  --shadow: 0 10px 40px rgba(0, 0, 0, .45);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: "Golos Text", system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+#map { position: fixed; inset: 0; background: var(--bg); }
+#map .leaflet-tile-pane { filter: var(--map-filter); }
+
+.muted { color: var(--muted); }
+
+/* ---------- Боковая панель ---------- */
+.panel {
+  position: fixed;
+  top: 16px; left: 16px; bottom: 16px;
+  width: 380px;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel__head { padding: 20px 20px 8px; }
+.panel__head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  display: flex; align-items: center; gap: 10px;
+}
+.panel__head .logo { width: 30px; height: 30px; flex: none; }  /* логотип — static/logo.svg */
+.panel__head p { margin: 6px 0 0; font-size: 14px; }
+
+.panel__foot { margin-top: auto; padding: 16px 20px; font-size: 12px; line-height: 1.5; }
+
+/* ---------- Форма маршрута ---------- */
+.route {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 12px 20px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.route__fields { display: grid; gap: 6px; }
+.field {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+.field input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  color: inherit;
+  outline: none;
+}
+.field:focus-within { box-shadow: inset 0 0 0 2px var(--text); }
+.field__dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.field__dot--from { background: var(--from); }
+.field__dot--to { background: var(--to); }
+.field__badge:empty { display: none; }
+
+/* ---------- Подсказки станций ---------- */
+.field { position: relative; }
+.suggest {
+  position: absolute;
+  top: calc(100% + 4px); left: 0; right: 0;
+  z-index: 10;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0; padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow), 0 0 0 1px var(--line);
+}
+.suggest__item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.suggest__item.is-active { background: var(--bg); }
+
+/* Плавное появление: список — при открытии, строки — по очереди, через 25 мс друг за другом.
+   backwards — пока строка ждёт своей очереди, она уже прозрачная, а не мелькает */
+.suggest.is-opening { animation: suggest-in .18s ease-out; }
+.suggest__item.is-new {
+  animation: suggest-row .22s ease-out backwards;
+  animation-delay: calc(var(--i) * 25ms);
+}
+@keyframes suggest-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes suggest-row { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .suggest.is-opening, .suggest__item.is-new { animation: none; }
+}
+.suggest__badges { grid-row: span 2; display: flex; gap: 3px; }
+.suggest__badges .badge__num { min-width: 24px; height: 24px; font-size: 12px; }
+.suggest__name { font-size: 15px; }
+.suggest__name b { font-weight: 700; }
+.suggest__line { font-size: 12px; color: var(--muted); }
+
+.icon-btn {
+  align-self: center;
+  width: 36px; height: 36px;
+  border: 0; border-radius: 50%;
+  background: var(--bg);
+  font-size: 18px;
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--line); }
+
+.btn {
+  grid-column: 1 / -1;
+  padding: 12px 16px;
+  border: 0; border-radius: 10px;
+  background: var(--text);
+  color: var(--on-text);
+  font: inherit; font-weight: 600; font-size: 15px;
+  cursor: pointer;
+}
+.btn:hover { background: var(--btn-hover); }
+.btn--ghost { background: var(--bg); color: var(--text); padding: 10px 14px; }
+.btn--ghost:hover { background: var(--line); }
+
+/* ---------- Результат маршрута ---------- */
+.route-result { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.route-result__total { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.route-result__total strong { font-size: 28px; font-weight: 700; }
+.route-result .error { color: var(--accent); margin: 0; }
+
+.legs { list-style: none; margin: 0; padding: 0; }
+.leg { position: relative; padding: 0 0 14px 22px; }
+.leg::before {                      /* цветная полоса линии */
+  content: "";
+  position: absolute; left: 5px; top: 6px; bottom: -6px;
+  width: 4px; border-radius: 2px;
+  background: var(--leg-color);
+}
+.leg::after {                       /* кружок станции */
+  content: "";
+  position: absolute; left: 0; top: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--station-fill);
+  border: 3px solid var(--leg-color);
+  box-sizing: border-box;
+}
+.leg--transfer::before { background: none; border-left: 3px dotted var(--muted); width: 0; left: 6px; }
+.leg--transfer::after { border-color: var(--muted); }
+.leg--end::before { display: none; }
+/* Строка маршрута появляется, когда до неё дорисовалась линия на карте */
+.leg { transition: opacity .3s, transform .3s; }
+.leg--pending { opacity: 0; transform: translateY(4px); }
+.leg__station { font-weight: 600; cursor: pointer; }
+.leg__station:hover { text-decoration: underline; }
+.leg__info { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.leg__car {                         /* «Удобный вагон: первый» */
+  display: inline-block;
+  margin-top: 6px; padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+/* ---------- Карточка станции ---------- */
+.card.is-appearing { animation: card-in .35s ease-out; }
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+/* Кому анимация мешает (настройка «уменьшить движение» в системе) — без неё */
+@media (prefers-reduced-motion: reduce) {
+  .card.is-appearing { animation: none; }
+}
+.card__photo { margin: 0; position: relative; background: var(--bg); }
+.card__photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  transition: opacity .25s;
+}
+/* Пока фото грузится — его не видно, остаётся серый прямоугольник того же размера */
+.card__photo img.is-loading { opacity: 0; transition: none; }
+.card__photo figcaption {
+  padding: 6px 20px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.card__photo figcaption a { color: inherit; }
+
+.card__body { padding: 8px 20px 20px; }
+.card__lines { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 99px;
+  background: var(--bg);
+  font-size: 13px;
+}
+.badge__num {
+  display: grid; place-items: center;
+  min-width: 20px; height: 20px; padding: 0 4px;
+  border-radius: 99px;
+  color: #fff; font-size: 11px; font-weight: 700;
+}
+.card h2 { margin: 10px 0 14px; font-size: 26px; letter-spacing: -.01em; }
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.facts div { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+.facts .facts__wide { grid-column: 1 / -1; }
+.facts dt { font-size: 12px; color: var(--muted); }
+.facts dd { margin: 2px 0 0; font-weight: 600; }
+.facts .facts__extra { font-size: 13px; font-weight: 400; color: var(--muted); }
+.facts__note { font-size: 13px; font-weight: 400; color: var(--muted); }  /* «(СТЛ)» после даты */
+
+.names h3 { margin: 0 0 8px; font-size: 15px; }
+.names ol, .names ul { list-style: none; margin: 0 0 18px; padding: 0; }
+.names li {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.names li span:last-child { color: var(--muted); white-space: nowrap; }
+.names li.is-now { font-weight: 600; }
+
+/* Пересадки в карточке: значок линии, станция, под ней — название линии */
+.names .transfers { margin-bottom: 18px; }
+.names li.transfer {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 10px;
+  align-items: center;
+  justify-content: start;
+  cursor: pointer;
+}
+.transfer__badges { grid-row: span 2; display: flex; gap: 3px; }
+.transfer__badges .badge__num { min-width: 24px; height: 24px; font-size: 12px; }
+.transfer__name { font-weight: 600; }
+.names li.transfer span.transfer__line { font-size: 12px; white-space: normal; }
+.transfer:hover .transfer__name { text-decoration: underline; }
+
+.card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.card__actions .btn { grid-column: auto; }
+.link { margin-left: auto; color: var(--text); font-size: 14px; }
+
+/* ---------- Линии и станции на карте ---------- */
+/* Плавное приглушение схемы при показе маршрута и обратно */
+.metro-edge, .metro-station { transition: stroke-opacity .4s, fill-opacity .4s; }
+
+/* ---------- Подписи на карте ---------- */
+.leaflet-tooltip.station-label {
+  padding: 2px 8px;
+  border: 0; border-radius: 6px;
+  background: var(--tooltip-bg);
+  color: var(--text);
+  font: 600 13px "Golos Text", system-ui, sans-serif;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+}
+.leaflet-tooltip-top.station-label::before { border-top-color: var(--tooltip-bg); }  /* уголок подписи */
+
+/* Пунктиры пересадок: цвет из темы (CSS сильнее, чем цвет, который ставит Leaflet) */
+.metro-transfer { stroke: var(--transfer); }
+.route-transfer { stroke: var(--route-transfer); }
+
+/* Кнопки масштаба и подпись «Leaflet | OpenStreetMap» — в цветах темы */
+.leaflet-bar a, .leaflet-bar a:hover { background: var(--surface); color: var(--text); border-color: var(--line); }
+.leaflet-bar a.leaflet-disabled { background: var(--bg); color: var(--muted); }
+.leaflet-container .leaflet-control-attribution { background: var(--surface); color: var(--muted); }
+.leaflet-control-attribution a { color: var(--text); }
+
+/* Рублёво-Архангельская линия почти чёрная — на тёмной карте её не видно, делаем светлее */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .line-17 { stroke: #7f8ca6; }
+}
+:root[data-theme="dark"] .line-17 { stroke: #7f8ca6; }
+
+/* ---------- Кнопка темы ---------- */
+.panel__head { position: relative; }
+.theme-btn {
+  position: absolute; top: 16px; right: 16px;
+  display: grid; place-items: center;
+  color: var(--text);
+}
+.theme-btn svg { width: 18px; height: 18px; }
+.theme-btn[data-next="dark"] .theme-btn__sun,
+.theme-btn[data-next="light"] .theme-btn__moon { display: none; }
+/* Значок появляется с поворотом (анимация запускается каждый раз, когда значок снова становится видимым) */
+.theme-btn svg { animation: theme-icon-in .5s cubic-bezier(.4, 0, .2, 1); }
+@keyframes theme-icon-in {
+  from { transform: rotate(-90deg) scale(.4); opacity: 0; }
+}
+
+/* Смена темы кругом (см. map.js): отключаем обычное плавное затухание браузера,
+   вместо него — наш растущий круг */
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-btn svg { animation: none; }
+}
+
+/* ---------- Телефон: панель снизу ---------- */
+@media (max-width: 700px) {
+  .panel {
+    top: auto; left: 0; right: 0; bottom: 0;
+    width: auto;
+    max-height: 58vh;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .panel__head { padding: 14px 16px 4px; }
+  .route, .route-result, .card__body, .panel__foot { padding-left: 16px; padding-right: 16px; }
+  .card__photo figcaption { padding: 6px 16px; }
+  .suggest { max-height: 200px; }
+  .leaflet-top.leaflet-right { top: 0; }
+}
